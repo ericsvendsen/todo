@@ -218,7 +218,7 @@ gulp.task('nodemon', ['build'], function (cb) {
             setTimeout(function () {
                 browserSync.init({
                     proxy: 'localhost:8080',
-                    browser: ['google chrome', 'firefox']
+                    browser: ['google chrome']
                 });
             }, 1000);
 
