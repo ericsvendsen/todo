@@ -1,27 +1,22 @@
 var gulp = require('gulp'),
     concat = require('gulp-concat'),
-    //connect = require('gulp-connect'),
     nodemon = require('gulp-nodemon'),
+    browserSync = require('browser-sync').create(),
     mainBowerFiles = require('main-bower-files'),
     less = require('gulp-less'),
     jshint = require('gulp-jshint'),
-    //karma = require('karma').server,
     sourcemaps = require('gulp-sourcemaps'),
     del = require('del'),
     uglify = require('gulp-uglify'),
     cleanCSS = require('gulp-clean-css'),
     gulpFilter = require('gulp-filter'),
-    ngAnnotate = require('gulp-ng-annotate');
-    //tar = require('gulp-tar'),
-    //gzip = require('gulp-gzip'),
-    //p = require('./package.json');
+    ngAnnotate = require('gulp-ng-annotate'),
+    path = require('path');
 
 var paths = {
     styles: ['./client/app/styles/main.less','!./client/app/styles/bootstrap-overrides.less'],
     scripts: ['./client/app/**/*.js'],
     html: ['./client/app/views/**/*.html']
-    // tests: ['./tests/*.js'],
-    // config: ['./config/*.json']
 };
 
 // clean
@@ -128,12 +123,6 @@ var appJs = function () {
 gulp.task('app-js', ['clean'], appJs);
 gulp.task('app-js-watch', appJs);
 
-// var appConfig = function () {
-//     return gulp.src(paths.config)
-//         .pipe(gulp.dest('./client/build/config'));
-// };
-// gulp.task('app-config', ['clean'], appConfig);
-
 var appHtml = function () {
     return gulp.src(paths.html)
         //.pipe(connect.reload())
@@ -154,7 +143,6 @@ var appCss = function () {
 gulp.task('app-css', ['clean'], appCss);
 gulp.task('app-css-watch', appCss);
 
-//gulp.task('app-build', ['app-js', 'app-config', 'app-html', 'app-css']);
 gulp.task('app-build', ['app-js', 'app-html', 'app-css']);
 
 // code linting
@@ -164,30 +152,6 @@ gulp.task('lint', function () {
         .pipe(jshint.reporter('jshint-stylish'))
         .pipe(jshint.reporter('fail'));
 });
-
-// // tests
-// gulp.task('test', function (done) {
-//     karma.start({
-//         configFile: 'karma.conf.js',
-//         singleRun: true
-//     }, done);
-// });
-
-// dev server
-// gulp.task('connect', ['build'], function () {
-//     connect.server({
-//         port: 3000,
-//         root: 'build',
-//         livereload: true
-//     });
-// });
-
-// // watch files
-// gulp.task('watch', ['connect'], function () {
-//     gulp.watch(paths.html, ['app-html-watch']);
-//     gulp.watch(paths.scripts, ['lint', 'app-js-watch']);
-//     gulp.watch(paths.styles, ['app-css-watch']);
-// });
 
 // build
 gulp.task('build', ['vendor-build', 'app-build', 'lint'], function () {
@@ -223,29 +187,51 @@ gulp.task('uglify-app-css', ['dist-copy'], function () {
 // main dist task
 gulp.task('dist', ['uglify-vendor-js', 'uglify-app-js', 'uglify-app-css']);
 
-// // deploy
-// gulp.task('deploy-ngwordpress', ['dist'], function () {
-//     return gulp.src('./client/dist/**/*')
-//         .pipe(gulp.dest('./ngwordpress')) // this will be the name of the directory inside the archive
-//         .pipe(tar('ngwordpress' + p.version + '.tar'))
-//         .pipe(gzip())
-//         .pipe(gulp.dest('./deploy'));
-// });
-//
-// gulp.task('deploy', ['deploy-ngwordpress'], function () {
-//     return del([
-//         './ngwordpress'
-//     ]);
-// });
+gulp.task('nodemon', ['build'], function (cb) {
+    var called = false;
+    return nodemon({
+        script: './server.js',
+        ext: 'html js less',
+        watch: './client/app',
+        tasks: function (changedFiles) {
+            // only run tasks for changed file types
+            var tasks = [];
+            changedFiles.forEach(function (file) {
+                if (path.extname(file) === '.js' && !~tasks.indexOf('lint')) {
+                    tasks.push('lint');
+                    tasks.push('app-js-watch');
+                }
+                if (path.extname(file) === '.less' && !~tasks.indexOf('app-css-watch')) {
+                    tasks.push('app-css-watch');
+                }
+                if (path.extname(file) === '.html' && !~tasks.indexOf('app-html-watch')) {
+                    tasks.push('app-html-watch');
+                }
+            });
+            return tasks;
+        }
+    }).on('start', function () {
+        // ensure browserSync is only started once
+        if (!called) {
+            console.log('started');
+            // putting browserSync inside a timeout is (right now) the only way to ensure it runs after nodemon is done
+            setTimeout(function () {
+                browserSync.init({
+                    proxy: 'localhost:8080',
+                    browser: ['google chrome', 'firefox']
+                });
+            }, 1000);
 
-gulp.task('dev-server', ['build'], function () {
-    nodemon({ script: './server.js',
-        ext: 'html js',
-        tasks: ['lint'] })
-        .on('restart', function () {
-            console.log('restarted!')
-        });
+            called = true;
+            cb();
+        }
+    }).on('restart', function () {
+        console.log('restarted');
+        setTimeout(function () {
+            browserSync.reload();
+        }, 1000);
+    });
 });
 
 // default gulp task
-gulp.task('default', ['dev-server']);
+gulp.task('default', ['nodemon']);
