@@ -2,6 +2,8 @@ var gulp = require('gulp'),
     concat = require('gulp-concat'),
     nodemon = require('gulp-nodemon'),
     browserSync = require('browser-sync').create(),
+    connect = require('gulp-connect'),
+    exec = require('child_process').exec,
     mainBowerFiles = require('main-bower-files'),
     less = require('gulp-less'),
     jshint = require('gulp-jshint'),
@@ -117,7 +119,7 @@ var appJs = function () {
         .pipe(concat('app.js'))
         .pipe(ngAnnotate({ single_quotes: true }))
         .pipe(sourcemaps.write())
-        //.pipe(connect.reload())
+        .pipe(connect.reload())
         .pipe(gulp.dest('./client/build/scripts'));
 };
 gulp.task('app-js', ['clean'], appJs);
@@ -125,7 +127,7 @@ gulp.task('app-js-watch', appJs);
 
 var appHtml = function () {
     return gulp.src(paths.html)
-        //.pipe(connect.reload())
+        .pipe(connect.reload())
         .pipe(gulp.dest('./client/build/views'));
 };
 gulp.task('app-html', ['clean'], appHtml);
@@ -137,7 +139,7 @@ var appCss = function () {
         .pipe(less())
         .pipe(concat('app.css'))
         .pipe(sourcemaps.write())
-        //.pipe(connect.reload())
+        .pipe(connect.reload())
         .pipe(gulp.dest('./client/build/styles'));
 };
 gulp.task('app-css', ['clean'], appCss);
@@ -187,51 +189,21 @@ gulp.task('uglify-app-css', ['dist-copy'], function () {
 // main dist task
 gulp.task('dist', ['uglify-vendor-js', 'uglify-app-js', 'uglify-app-css']);
 
-gulp.task('nodemon', ['build'], function (cb) {
-    var called = false;
-    return nodemon({
-        script: './server.js',
-        ext: 'html js less',
-        watch: './client/app',
-        tasks: function (changedFiles) {
-            // only run tasks for changed file types
-            var tasks = [];
-            changedFiles.forEach(function (file) {
-                if (path.extname(file) === '.js' && !~tasks.indexOf('lint')) {
-                    tasks.push('lint');
-                    tasks.push('app-js-watch');
-                }
-                if (path.extname(file) === '.less' && !~tasks.indexOf('app-css-watch')) {
-                    tasks.push('app-css-watch');
-                }
-                if (path.extname(file) === '.html' && !~tasks.indexOf('app-html-watch')) {
-                    tasks.push('app-html-watch');
-                }
-            });
-            return tasks;
-        }
-    }).on('start', function () {
-        // ensure browserSync is only started once
-        if (!called) {
-            console.log('started');
-            // putting browserSync inside a timeout is (right now) the only way to ensure it runs after nodemon is done
-            setTimeout(function () {
-                browserSync.init({
-                    proxy: 'localhost:8080',
-                    browser: ['google chrome']
-                });
-            }, 1000);
-
-            called = true;
-            cb();
-        }
-    }).on('restart', function () {
-        console.log('restarted');
-        setTimeout(function () {
-            browserSync.reload();
-        }, 1000);
+gulp.task('connect', ['build'], function () {
+    connect.server({
+        port: 3000,
+        root: './client/build',
+        livereload: true
     });
 });
 
+gulp.task('watch', ['connect'], function () {
+    gulp.watch(paths.html, ['app-html-watch']);
+    gulp.watch(paths.scripts, ['lint', 'app-js-watch']);
+    gulp.watch(paths.styles, ['app-css-watch']);
+});
+
 // default gulp task
-gulp.task('default', ['nodemon']);
+gulp.task('default', ['watch'], function () {
+    exec('node server');
+});
